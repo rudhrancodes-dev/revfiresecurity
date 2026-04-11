@@ -1,0 +1,11 @@
+<svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="revIconTitle revIconDesc">
+  <title id="revIconTitle">Rev Fire and Security Solutions icon</title>
+  <desc id="revIconDesc">A symmetrical black shield with a red flame center mark.</desc>
+  <g transform="translate(30 15)">
+    <path d="M130 0L230 38V126C230 203 186 263 130 290C74 263 30 203 30 126V38L130 0Z" fill="#0A0A0A"/>
+    <path d="M130 22L206 51V126C206 186 172 234 130 259C88 234 54 186 54 126V51L130 22Z" fill="white"/>
+    <path d="M130 45L185 66V126C185 172 161 209 130 231C99 209 75 172 75 126V66L130 45Z" fill="#0A0A0A"/>
+    <path d="M130 76C154 103 166 129 166 155C166 186 150 209 130 223C110 209 94 186 94 155C94 129 106 103 130 76Z" fill="#FF2C2C"/>
+    <path d="M129 100C144 116 152 130 153 145C148 137 141 133 133 133C122 133 113 142 113 154C113 166 119 176 129 184C112 179 102 167 102 152C102 129 114 114 129 100Z" fill="white"/>
+    </g>
+</svg>

@@ -1,0 +1,13 @@
+node_modules/
+.netlify/
+.wrangler/
+
+.DS_Store
+Thumbs.db
+
+dist/
+build/
+coverage/
+
+.env
+.env.*

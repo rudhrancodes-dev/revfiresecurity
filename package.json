@@ -1,0 +1,20 @@
+{
+  "name": "rev-fire-and-security",
+  "version": "1.0.0",
+  "description": "Rev Fire & Security Solutions static site",
+  "main": "script.js",
+  "scripts": {
+    "cf:whoami": "wrangler whoami",
+    "cf:project:create": "wrangler pages project create rev-fire-security",
+    "cf:deploy": "wrangler pages deploy . --project-name rev-fire-security",
+    "cf:deploy:branch": "wrangler pages deploy . --project-name rev-fire-security --branch preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "netlify-cli": "^24.11.1",
+    "wrangler": "^4.81.1"
+  }
+}
