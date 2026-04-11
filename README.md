@@ -4,6 +4,8 @@ A premium static company website for **Rev Fire & Security Solutions**, built wi
 
 The site is designed to present a modern fire and security brand with a cinematic dark UI, animated hero background, responsive layout, and custom SVG logo integration suitable for company websites, proposals, and digital branding.
 
+This project was **vibe-coded** as a fast-moving creative build, then refined into a cleaner developer-friendly static site structure.
+
 ## Overview
 
 This project showcases a polished corporate marketing site for a fire safety and security solutions company. It combines:
@@ -15,6 +17,8 @@ This project showcases a polished corporate marketing site for a fire safety and
 - Service, project, contact, and company information sections
 
 The codebase is intentionally lightweight and framework-free, making it easy to host as a static site on platforms like GitHub Pages, Netlify, or Cloudflare Pages.
+
+It also reflects a vibe-coding workflow: rapid visual exploration first, followed by cleanup, structuring, and documentation for maintainability.
 
 ## Tech Stack
 
