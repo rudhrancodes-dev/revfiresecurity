@@ -41,73 +41,121 @@ setTimeout(runLoader, 350);
     if (!canvas || typeof THREE === 'undefined') return;
 
     const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 70;
+    scene.fog    = new THREE.FogExp2(0x000000, 0.008);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 80);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x000000, 0);
+    renderer.shadowMap.enabled = false;
 
-    function makeParticleTex(color) {
+    /* ── Helpers ─────────────────────────────────────────── */
+    function makeGlowTex(r, g, b) {
         const c = document.createElement('canvas');
-        c.width = c.height = 64;
+        c.width = c.height = 128;
         const ctx = c.getContext('2d');
-        const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-        g.addColorStop(0,   color.center);
-        g.addColorStop(0.35, color.mid);
-        g.addColorStop(1,   'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, 64, 64);
+        const grd = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+        grd.addColorStop(0,   `rgba(${r},${g},${b},1)`);
+        grd.addColorStop(0.25,`rgba(${r},${g},${b},0.6)`);
+        grd.addColorStop(0.6, `rgba(${r},${g},${b},0.15)`);
+        grd.addColorStop(1,   `rgba(0,0,0,0)`);
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, 128, 128);
         return new THREE.CanvasTexture(c);
     }
 
-    const texRed   = makeParticleTex({ center: 'rgba(255,80,50,1)',   mid: 'rgba(255,44,44,0.5)' });
-    const texWhite = makeParticleTex({ center: 'rgba(255,255,255,1)', mid: 'rgba(200,200,255,0.4)' });
+    const texFire  = makeGlowTex(255, 80,  40);
+    const texEmber = makeGlowTex(255, 180, 60);
+    const texSpark = makeGlowTex(255, 255, 200);
+    const texBlue  = makeGlowTex(100, 160, 255);
 
-    const PARTICLE_COUNT = 160;
-    const SPREAD_X = 150, SPREAD_Y = 85, SPREAD_Z = 30;
+    /* ── Central icosphere wireframe ─────────────────────── */
+    const icoGeo = new THREE.IcosahedronGeometry(18, 2);
+    const icoMat = new THREE.MeshBasicMaterial({
+        color: 0xff2c2c, wireframe: true,
+        transparent: true, opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+    });
+    const ico = new THREE.Mesh(icoGeo, icoMat);
+    scene.add(ico);
 
-    const particles = [];
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-        particles.push({
-            x:  (Math.random() - 0.5) * SPREAD_X,
-            y:  (Math.random() - 0.5) * SPREAD_Y,
-            z:  (Math.random() - 0.5) * SPREAD_Z,
-            vx: (Math.random() - 0.5) * 0.035,
-            vy: (Math.random() - 0.5) * 0.025,
-            isRed: Math.random() < 0.28,
+    /* inner glow sphere */
+    const innerGeo = new THREE.IcosahedronGeometry(14, 1);
+    const innerMat = new THREE.MeshBasicMaterial({
+        color: 0xff5500, wireframe: true,
+        transparent: true, opacity: 0.07,
+        blending: THREE.AdditiveBlending,
+    });
+    const innerIco = new THREE.Mesh(innerGeo, innerMat);
+    scene.add(innerIco);
+
+    /* ── Orbital rings ────────────────────────────────────── */
+    function makeRing(radius, tube, segs, color, opacity, rx, ry) {
+        const m = new THREE.MeshBasicMaterial({
+            color, wireframe: true, transparent: true, opacity,
+            blending: THREE.AdditiveBlending,
+        });
+        const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 6, segs), m);
+        mesh.rotation.set(rx || 0, ry || 0, 0);
+        scene.add(mesh);
+        return mesh;
+    }
+
+    const ring1 = makeRing(26, 0.35, 140, 0xff2c2c, 0.30, 0.5,  0.2);
+    const ring2 = makeRing(38, 0.22, 120, 0xff6600, 0.18, -0.9, 0.4);
+    const ring3 = makeRing(50, 0.18, 100, 0xffaa00, 0.10, 0.3, -0.5);
+    const ring4 = makeRing(16, 0.28, 80,  0xff4400, 0.22, Math.PI/2, 0);
+
+    /* ── Fire particle system ─────────────────────────────── */
+    const FIRE_COUNT  = 380;
+    const fireData = [];
+    for (let i = 0; i < FIRE_COUNT; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const r     = 18 + Math.random() * 55;
+        fireData.push({
+            x: r * Math.sin(phi) * Math.cos(theta),
+            y: r * Math.sin(phi) * Math.sin(theta),
+            z: r * Math.cos(phi),
+            vx: (Math.random() - 0.5) * 0.05,
+            vy: (Math.random() - 0.5) * 0.04,
+            vz: (Math.random() - 0.5) * 0.03,
+            life: Math.random(),
+            speed: 0.003 + Math.random() * 0.005,
+            type: Math.random(),
         });
     }
 
-    function buildPointsMesh(isRed, texture) {
-        const group    = particles.filter(p => p.isRed === isRed);
-        const posArray = new Float32Array(group.length * 3);
-        const geo      = new THREE.BufferGeometry();
-        const attr     = new THREE.BufferAttribute(posArray, 3);
+    function buildParticles(filter, texture, size, opacity) {
+        const grp    = fireData.filter(filter);
+        const posArr = new Float32Array(grp.length * 3);
+        const geo    = new THREE.BufferGeometry();
+        const attr   = new THREE.BufferAttribute(posArr, 3);
         attr.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('position', attr);
         const mat = new THREE.PointsMaterial({
-            size: isRed ? 1.2 : 0.9,
-            map: texture,
-            transparent: true,
-            opacity: isRed ? 0.9 : 0.65,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
+            size, map: texture, transparent: true, opacity,
+            blending: THREE.AdditiveBlending, depthWrite: false,
             sizeAttenuation: true,
         });
-        const mesh = new THREE.Points(geo, mat);
-        scene.add(mesh);
-        return { mesh, group, attr };
+        const pts = new THREE.Points(geo, mat);
+        scene.add(pts);
+        return { pts, grp, attr };
     }
 
-    const redPoints   = buildPointsMesh(true,  texRed);
-    const whitePoints = buildPointsMesh(false, texWhite);
+    const firePts  = buildParticles(p => p.type < 0.45, texFire,  1.6, 0.85);
+    const emberPts = buildParticles(p => p.type >= 0.45 && p.type < 0.75, texEmber, 1.1, 0.70);
+    const sparkPts = buildParticles(p => p.type >= 0.75 && p.type < 0.92, texSpark, 0.7, 0.55);
+    const bluePts  = buildParticles(p => p.type >= 0.92, texBlue, 0.9, 0.40);
 
-    const MAX_LINES   = 420;
-    const MAX_DIST_SQ = 24 * 24;
+    /* ── Network connection lines ─────────────────────────── */
+    const MAX_LINES = 600;
+    const MAX_DIST_SQ = 22 * 22;
 
-    function buildLineMesh(color, opacity) {
+    function buildLines(color, opacity) {
         const pos  = new Float32Array(MAX_LINES * 6);
         const geo  = new THREE.BufferGeometry();
         const attr = new THREE.BufferAttribute(pos, 3);
@@ -120,27 +168,41 @@ setTimeout(runLoader, 350);
         return { pos, geo, attr };
     }
 
-    const lines1 = buildLineMesh(0xff3333, 0.18);
-    const lines2 = buildLineMesh(0xaaaacc, 0.09);
+    const linesRed  = buildLines(0xff3300, 0.22);
+    const linesAmber = buildLines(0xff8800, 0.12);
 
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff2c2c, wireframe: true, transparent: true, opacity: 0.045 });
+    /* ── Flying debris / shards ───────────────────────────── */
+    const SHARD_COUNT = 22;
+    const shards = [];
+    for (let i = 0; i < SHARD_COUNT; i++) {
+        const geo = new THREE.TetrahedronGeometry(0.5 + Math.random() * 1.2, 0);
+        const mat = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? 0xff3300 : 0xff9900,
+            wireframe: true, transparent: true,
+            opacity: 0.25 + Math.random() * 0.35,
+            blending: THREE.AdditiveBlending,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const r     = 20 + Math.random() * 42;
+        mesh.position.set(
+            r * Math.sin(phi) * Math.cos(theta),
+            r * Math.sin(phi) * Math.sin(theta),
+            r * Math.cos(phi)
+        );
+        mesh.userData = {
+            rx: (Math.random() - 0.5) * 0.02,
+            ry: (Math.random() - 0.5) * 0.02,
+            rz: (Math.random() - 0.5) * 0.02,
+            orbitSpeed: (Math.random() - 0.5) * 0.004,
+            orbitAxis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
+        };
+        scene.add(mesh);
+        shards.push(mesh);
+    }
 
-    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(32, 0.4, 16, 120), ringMat);
-    ring1.rotation.x = 0.5;
-    scene.add(ring1);
-
-    const ring2m = ringMat.clone();
-    ring2m.opacity = 0.025;
-    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(50, 0.25, 12, 100), ring2m);
-    ring2.rotation.set(-0.8, 0.3, 0);
-    scene.add(ring2);
-
-    const ring3m = ringMat.clone();
-    ring3m.opacity = 0.06;
-    const ring3 = new THREE.Mesh(new THREE.TorusGeometry(18, 0.3, 16, 80), ring3m);
-    ring3.rotation.x = Math.PI / 2;
-    scene.add(ring3);
-
+    /* ── Mouse parallax ──────────────────────────────────── */
     const mouse     = { x: 0, y: 0 };
     const camTarget = { x: 0, y: 0 };
 
@@ -149,59 +211,94 @@ setTimeout(runLoader, 350);
         mouse.y =  (e.clientY / window.innerHeight - 0.5) * 2;
     });
 
+    /* ── Update helpers ───────────────────────────────────── */
+    function syncParticles({ grp, attr }) {
+        for (let i = 0; i < grp.length; i++) attr.setXYZ(i, grp[i].x, grp[i].y, grp[i].z);
+        attr.needsUpdate = true;
+    }
+
     function updateConnections() {
-        let i1 = 0, i2 = 0;
-        for (let i = 0; i < PARTICLE_COUNT && (i1 < MAX_LINES || i2 < MAX_LINES); i++) {
-            for (let j = i + 1; j < PARTICLE_COUNT; j++) {
-                const p1 = particles[i], p2 = particles[j];
-                const dx = p1.x - p2.x, dy = p1.y - p2.y;
-                if (dx * dx + dy * dy < MAX_DIST_SQ) {
-                    const L = p1.isRed ? lines1 : lines2;
-                    const idx = p1.isRed ? i1 : i2;
-                    if (idx < MAX_LINES) {
-                        L.pos[idx * 6]     = p1.x; L.pos[idx * 6 + 1] = p1.y; L.pos[idx * 6 + 2] = p1.z;
-                        L.pos[idx * 6 + 3] = p2.x; L.pos[idx * 6 + 4] = p2.y; L.pos[idx * 6 + 5] = p2.z;
-                        if (p1.isRed) i1++; else i2++;
-                    }
+        let ri = 0, ai = 0;
+        const all = fireData;
+        const n   = all.length;
+        outer: for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const a = all[i], b = all[j];
+                const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+                if (dx * dx + dy * dy + dz * dz < MAX_DIST_SQ) {
+                    const useRed = a.type < 0.5;
+                    const L = useRed ? linesRed : linesAmber;
+                    let idx = useRed ? ri : ai;
+                    if (idx >= MAX_LINES) continue;
+                    L.pos[idx * 6]     = a.x; L.pos[idx * 6 + 1] = a.y; L.pos[idx * 6 + 2] = a.z;
+                    L.pos[idx * 6 + 3] = b.x; L.pos[idx * 6 + 4] = b.y; L.pos[idx * 6 + 5] = b.z;
+                    if (useRed) ri++; else ai++;
+                    if (ri >= MAX_LINES && ai >= MAX_LINES) break outer;
                 }
             }
         }
-        lines1.geo.setDrawRange(0, i1 * 2); lines1.attr.needsUpdate = true;
-        lines2.geo.setDrawRange(0, i2 * 2); lines2.attr.needsUpdate = true;
-    }
-
-    function updatePoints() {
-        const rg = redPoints.group, wg = whitePoints.group;
-        for (let i = 0; i < rg.length; i++) redPoints.attr.setXYZ(i, rg[i].x, rg[i].y, rg[i].z);
-        for (let i = 0; i < wg.length; i++) whitePoints.attr.setXYZ(i, wg[i].x, wg[i].y, wg[i].z);
-        redPoints.attr.needsUpdate = true;
-        whitePoints.attr.needsUpdate = true;
+        linesRed.geo.setDrawRange(0, ri * 2);  linesRed.attr.needsUpdate  = true;
+        linesAmber.geo.setDrawRange(0, ai * 2); linesAmber.attr.needsUpdate = true;
     }
 
     let frame = 0;
+    const quat = new THREE.Quaternion();
 
     function animate() {
         requestAnimationFrame(animate);
         frame++;
 
-        for (let i = 0; i < PARTICLE_COUNT; i++) {
-            const p = particles[i];
-            p.x += p.vx; p.y += p.vy;
-            if (p.x >  SPREAD_X / 2) p.x = -SPREAD_X / 2;
-            if (p.x < -SPREAD_X / 2) p.x =  SPREAD_X / 2;
-            if (p.y >  SPREAD_Y / 2) p.y = -SPREAD_Y / 2;
-            if (p.y < -SPREAD_Y / 2) p.y =  SPREAD_Y / 2;
+        const t = frame * 0.01;
+
+        /* move fire particles */
+        for (let i = 0; i < FIRE_COUNT; i++) {
+            const p = fireData[i];
+            p.x += p.vx + Math.sin(t + i * 0.3) * 0.008;
+            p.y += p.vy + Math.cos(t + i * 0.5) * 0.006;
+            p.z += p.vz;
+            const dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (dist > 75 || dist < 10) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi   = Math.acos(2 * Math.random() - 1);
+                const r     = 20 + Math.random() * 40;
+                p.x = r * Math.sin(phi) * Math.cos(theta);
+                p.y = r * Math.sin(phi) * Math.sin(theta);
+                p.z = r * Math.cos(phi);
+            }
         }
 
-        updatePoints();
+        syncParticles(firePts);
+        syncParticles(emberPts);
+        syncParticles(sparkPts);
+        syncParticles(bluePts);
         if (frame % 2 === 0) updateConnections();
 
-        ring1.rotation.y += 0.0006; ring1.rotation.z += 0.0003;
-        ring2.rotation.y -= 0.0004; ring2.rotation.z += 0.0002;
-        ring3.rotation.z += 0.0008;
+        /* icosphere rotation */
+        ico.rotation.x      += 0.0015; ico.rotation.y      += 0.0022;
+        innerIco.rotation.x -= 0.0020; innerIco.rotation.y -= 0.0018;
 
-        camTarget.x += (mouse.x * 5 - camTarget.x) * 0.04;
-        camTarget.y += (-mouse.y * 3 - camTarget.y) * 0.04;
+        /* rings */
+        ring1.rotation.y += 0.0010; ring1.rotation.z += 0.0005;
+        ring2.rotation.y -= 0.0007; ring2.rotation.x += 0.0004;
+        ring3.rotation.z += 0.0006; ring3.rotation.y -= 0.0003;
+        ring4.rotation.x += 0.0012; ring4.rotation.z -= 0.0008;
+
+        /* pulse opacity on ico */
+        const pulse = 0.14 + Math.sin(t * 1.5) * 0.06;
+        icoMat.opacity = pulse;
+
+        /* shards orbit */
+        for (const s of shards) {
+            s.rotation.x += s.userData.rx;
+            s.rotation.y += s.userData.ry;
+            s.rotation.z += s.userData.rz;
+            quat.setFromAxisAngle(s.userData.orbitAxis, s.userData.orbitSpeed);
+            s.position.applyQuaternion(quat);
+        }
+
+        /* camera parallax */
+        camTarget.x += (mouse.x * 7 - camTarget.x) * 0.035;
+        camTarget.y += (-mouse.y * 4 - camTarget.y) * 0.035;
         camera.position.x = camTarget.x;
         camera.position.y = camTarget.y;
         camera.lookAt(scene.position);
@@ -447,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             {
                 keys: ['contact', 'address', 'location', 'where', 'find', 'email', 'phone', 'number'],
-                reply: '📍 No-14 SMS Layout 2nd Street\n    Ondipdur, Coimbatore - 641016\n\n📞 +91 72879 28180\n📞 +91 63011 80242\n\n✉️ rudhran.codes@gmail.com',
+                reply: '📍 No-14 SMS Layout 2nd Street\n    Ondipudur, Coimbatore - 641016\n\n📞 +91 72879 28180\n📞 +91 63011 80242\n\n✉️ rudhran.codes@gmail.com',
                 chips: ['Get a Quote', 'Services', 'Emergency'],
             },
             {
